@@ -1,0 +1,109 @@
+import socket
+import sys
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+
+# -------------------------------
+# Scan a single TCP port
+# -------------------------------
+def scan_port(target, port):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1)
+
+            if sock.connect_ex((target, port)) == 0:
+                try:
+                    service = socket.getservbyport(port)
+                except OSError:
+                    service = "Unknown"
+
+                return (port, service)
+
+    except socket.error:
+        pass
+
+    return None
+
+
+# -------------------------------
+# Main Function
+# -------------------------------
+def main():
+
+    print("=" * 60)
+    print("        Python TCP Port Scanner")
+    print("=" * 60)
+
+    target = input("Enter Target IP/Hostname : ").strip()
+
+    try:
+        target_ip = socket.gethostbyname(target)
+    except socket.gaierror:
+        print("\nError: Unable to resolve hostname.")
+        sys.exit()
+
+    try:
+        start_port = int(input("Start Port : "))
+        end_port = int(input("End Port   : "))
+
+        if start_port < 1 or end_port > 65535 or start_port > end_port:
+            raise ValueError
+
+    except ValueError:
+        print("\nInvalid port range.")
+        sys.exit()
+
+    print("\n" + "-" * 60)
+    print(f"Target      : {target} ({target_ip})")
+    print(f"Port Range  : {start_port} - {end_port}")
+    print(f"Started     : {datetime.now()}")
+    print("-" * 60)
+
+    start_time = datetime.now()
+
+    open_ports = []
+
+    with ThreadPoolExecutor(max_workers=100) as executor:
+
+        futures = [
+            executor.submit(scan_port, target_ip, port)
+            for port in range(start_port, end_port + 1)
+        ]
+
+        for future in futures:
+            result = future.result()
+
+            if result:
+                port, service = result
+                print(f"Port {port:<5} OPEN   Service : {service}")
+                open_ports.append(result)
+
+    end_time = datetime.now()
+
+    print("-" * 60)
+
+    if open_ports:
+
+        print(f"Open Ports Found : {len(open_ports)}")
+
+        with open("scan_results.txt", "w") as file:
+
+            file.write(f"Target : {target}\n")
+            file.write(f"IP     : {target_ip}\n")
+            file.write(f"Date   : {datetime.now()}\n")
+            file.write("-" * 40 + "\n")
+
+            for port, service in sorted(open_ports):
+                file.write(f"Port {port:<5} {service}\n")
+
+        print("Results saved to scan_results.txt")
+
+    else:
+        print("No open ports found.")
+
+    print(f"Scan Duration : {end_time - start_time}")
+    print("-" * 60)
+
+
+if __name__ == "__main__":
+    main()
